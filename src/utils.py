@@ -65,3 +65,73 @@ def which_set(filename:str, validation_percentage:float, testing_percentage:floa
     else:
         result = 'training'
     return result
+
+
+
+from tqdm.notebook import tqdm
+import datetime
+import torch
+
+def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, device, log = True):
+    losses = []
+    accuracies = []
+    model = model.to(device)
+    for i, epoch in enumerate(range(num_epochs)):
+        for waveforms, sr, labels in tqdm(train_loader, total=len(train_loader), desc=f"Epoch {epoch+1}/{num_epochs}"):
+            
+            optimizer.zero_grad()
+            waveforms = waveforms.to(device)
+            outputs = model(waveforms.squeeze(1))
+
+            # Convert string labels to integer indices
+            target_indices = [label_to_index[label] for label in labels]
+
+            # Convert the list of indices to a tensor
+            target_tensor = torch.tensor(target_indices)
+
+            # print(outputs['logits'])
+
+            loss = criterion(outputs['logits'], target_tensor.to(device))
+            loss.backward()
+            optimizer.step()
+        
+        print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {loss.item()}")
+        
+        # predict on validation set
+        val_losses = []
+        val_accuracies = []
+        for waveforms, sr, labels in tqdm(val_loader, total=len(val_loader), desc=f"Validation"):
+            waveforms = waveforms.to(device)
+            outputs = model(waveforms.squeeze(1))
+            target_indices = [label_to_index[label] for label in labels]
+            target_tensor = torch.tensor(target_indices)
+            
+            loss = criterion(outputs['logits'], target_tensor.to(device))
+            print(loss)
+            val_losses.append(loss.item())
+            val_accuracies.append((outputs['logits'].argmax(1) == target_tensor.to(device)).float())
+        # break
+        print(val_losses)
+        print(val_accuracies)
+        val_losses = [l for l in val_losses]
+        val_accuracies = [a.item() for a in val_accuracies]
+
+        loss = sum(val_losses)/len(val_losses)
+        accuracy = sum(val_accuracies)/len(val_accuracies)
+
+        losses.append(loss)
+        accuracies.append(accuracy)
+
+        print(f"Epoch {epoch+1}/{num_epochs}, Validation Loss: {loss}, Validation Accuracy: {accuracy}")
+
+
+    if log:
+        date = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        log_dir = f"logs/{only_name}-{date}"
+        os.makedirs(log_dir)
+        # save acc and loss
+        with open(f"{log_dir}/acc.txt", "w") as f:
+            f.write(str(accuracies))
+        with open(f"{log_dir}/loss.txt", "w") as f:
+            f.write(str(losses))
+    
