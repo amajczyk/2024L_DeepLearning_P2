@@ -72,7 +72,7 @@ from tqdm.notebook import tqdm
 import datetime
 import torch
 
-def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, device, log = True):
+def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, device, label_to_index, only_name, log = True):
     losses = []
     accuracies = []
     model = model.to(device)
@@ -96,6 +96,8 @@ def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, dev
             optimizer.step()
         
         print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {loss.item()}")
+        torch.cuda.empty_cache()
+
         
         # predict on validation set
         val_losses = []
@@ -107,12 +109,12 @@ def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, dev
             target_tensor = torch.tensor(target_indices)
             
             loss = criterion(outputs['logits'], target_tensor.to(device))
-            print(loss)
+            # print(loss)
             val_losses.append(loss.item())
             val_accuracies.append((outputs['logits'].argmax(1) == target_tensor.to(device)).float())
         # break
-        print(val_losses)
-        print(val_accuracies)
+        # print(val_losses)
+        # print(val_accuracies)
         val_losses = [l for l in val_losses]
         val_accuracies = [a.item() for a in val_accuracies]
 
@@ -123,6 +125,8 @@ def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, dev
         accuracies.append(accuracy)
 
         print(f"Epoch {epoch+1}/{num_epochs}, Validation Loss: {loss}, Validation Accuracy: {accuracy}")
+        torch.cuda.empty_cache()
+
 
 
     if log:
