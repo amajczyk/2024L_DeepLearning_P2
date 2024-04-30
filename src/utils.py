@@ -66,17 +66,22 @@ def which_set(filename:str, validation_percentage:float, testing_percentage:floa
         result = 'training'
     return result
 
+import json
 
 
 from tqdm.notebook import tqdm
 import datetime
 import torch
+import json
+import json
 
-def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, device, label_to_index, only_name, log = True):
+def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, device, label_to_index, only_name, log = True, description = ""):
     losses = []
     accuracies = []
     model = model.to(device)
+    train_losses = []
     for i, epoch in enumerate(range(num_epochs)):
+        epoch_losses = []
         for waveforms, sr, labels in tqdm(train_loader, total=len(train_loader), desc=f"Epoch {epoch+1}/{num_epochs}"):
             
             optimizer.zero_grad()
@@ -92,10 +97,14 @@ def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, dev
             # print(outputs['logits'])
 
             loss = criterion(outputs['logits'], target_tensor.to(device))
+            epoch_losses.append(loss.item())
             loss.backward()
             optimizer.step()
         
-        print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {loss.item()}")
+
+        loss = sum(epoch_losses)/len(epoch_losses)
+        train_losses.append(loss)
+        print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {loss}")
         torch.cuda.empty_cache()
 
         
@@ -116,10 +125,15 @@ def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, dev
         # print(val_losses)
         # print(val_accuracies)
         val_losses = [l for l in val_losses]
-        val_accuracies = [a.item() for a in val_accuracies]
+        # print(val_accuracies)
+        val_len = [len(a) for a in val_accuracies]
+        val_accuracies = [a.sum().item() for a in val_accuracies]
+        
+        # print(val_accuracies, val_len)
+        
 
         loss = sum(val_losses)/len(val_losses)
-        accuracy = sum(val_accuracies)/len(val_accuracies)
+        accuracy = sum(val_accuracies)/sum(val_len)
 
         losses.append(loss)
         accuracies.append(accuracy)
@@ -132,10 +146,71 @@ def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, dev
     if log:
         date = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         log_dir = f"logs/{only_name}-{date}"
+        if description != "":
+            log_dir += f"_{description}"
         os.makedirs(log_dir)
         # save acc and loss
-        with open(f"{log_dir}/acc.txt", "w") as f:
-            f.write(str(accuracies))
-        with open(f"{log_dir}/loss.txt", "w") as f:
-            f.write(str(losses))
+        data = {
+            "val_acc": accuracies,
+            "val_loss": losses,
+            "train_loss": train_losses
+        }
+
+        with open(f"{log_dir}/data.json", "w") as f:
+            json.dump(data, f)
+
+        return log_dir
     
+
+def test(model, test_loader, criterion, device, label_to_index, only_name, log_dir, description = "", log = True):
+    model.eval()
+    losses = []
+    accuracies = []
+    for waveforms, sr, labels in tqdm(test_loader, total=len(test_loader), desc="Testing"):
+        waveforms = waveforms.to(device)
+        outputs = model(waveforms.squeeze(1))
+        target_indices = [label_to_index[label] for label in labels]
+        target_tensor = torch.tensor(target_indices)
+        loss = criterion(outputs['logits'], target_tensor.to(device))
+        losses.append(loss.item())
+        accuracies.append((outputs['logits'].argmax(1) == target_tensor.to(device)).float())
+    
+    lens = [len(a) for a in accuracies]
+    accuracies = [a.sum().item() for a in accuracies]
+    
+    # print(val_accuracies, val_len)
+
+
+    
+
+    loss = sum(losses)/len(losses)
+    accuracy = sum(accuracies)/sum(lens)
+
+    torch.cuda.empty_cache()
+
+    
+
+
+    if log:
+        if description != "":
+            log_dir += f"_{description}"
+       
+        try:    
+            data = json.load(open(f"{log_dir}/data.json", "r"))
+        except:
+            pass
+        # save acc and loss
+        
+        data["test_correct_in_batch"] = accuracies
+        data["test_losses"] = losses
+        data["test_loss"] = loss
+        data["test_batch_lens"] = lens
+        data["test_accuracy"] = accuracy
+        
+
+        with open(f"{log_dir}/data.json", "w") as f:
+            json.dump(data, f)
+
+
+    print(f"Test Loss: {loss}, Test Accuracy: {accuracy}")
+    return accuracy
