@@ -166,6 +166,8 @@ def test(model, test_loader, criterion, device, label_to_index, only_name, log_d
     model.eval()
     losses = []
     accuracies = []
+    predictions = []
+    real_labels = []
     for waveforms, sr, labels in tqdm(test_loader, total=len(test_loader), desc="Testing"):
         waveforms = waveforms.to(device)
         outputs = model(waveforms.squeeze(1))
@@ -174,6 +176,8 @@ def test(model, test_loader, criterion, device, label_to_index, only_name, log_d
         loss = criterion(outputs['logits'], target_tensor.to(device))
         losses.append(loss.item())
         accuracies.append((outputs['logits'].argmax(1) == target_tensor.to(device)).float())
+        predictions.extend(outputs['logits'].argmax(1).cpu().numpy())
+        real_labels.extend(target_tensor.cpu().numpy())
     
     lens = [len(a) for a in accuracies]
     accuracies = [a.sum().item() for a in accuracies]
@@ -200,12 +204,21 @@ def test(model, test_loader, criterion, device, label_to_index, only_name, log_d
         except:
             pass
         # save acc and loss
+
+        predictions = [int(p) for p in predictions]
+        real_labels = [int(p) for p in real_labels]
+        
         
         data["test_correct_in_batch"] = accuracies
         data["test_losses"] = losses
         data["test_loss"] = loss
         data["test_batch_lens"] = lens
         data["test_accuracy"] = accuracy
+        data["predictions"] = predictions
+        data["real_labels"] = real_labels
+        data["label_to_index"] = label_to_index
+
+        print(data)
         
 
         with open(f"{log_dir}/data.json", "w") as f:
