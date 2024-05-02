@@ -75,7 +75,7 @@ import torch
 import json
 import json
 
-def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, device, label_to_index, only_name, log = True, description = ""):
+def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, device, label_to_index, only_name, log = True, description = "", lstm = False):
     losses = []
     accuracies = []
     model = model.to(device)
@@ -86,7 +86,9 @@ def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, dev
             
             optimizer.zero_grad()
             waveforms = waveforms.to(device)
+        
             outputs = model(waveforms.squeeze(1))
+            
 
             # Convert string labels to integer indices
             target_indices = [label_to_index[label] for label in labels]
@@ -94,9 +96,13 @@ def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, dev
             # Convert the list of indices to a tensor
             target_tensor = torch.tensor(target_indices)
 
-            # print(outputs['logits'])
+            # print(f"output logits: {outputs}")
+            if lstm:
+                outputs = outputs
+            else:
 
-            loss = criterion(outputs['logits'], target_tensor.to(device))
+                outputs = outputs['logits']
+            loss = criterion(outputs, target_tensor.to(device))
             epoch_losses.append(loss.item())
             loss.backward()
             optimizer.step()
@@ -117,10 +123,14 @@ def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, dev
             target_indices = [label_to_index[label] for label in labels]
             target_tensor = torch.tensor(target_indices)
             
-            loss = criterion(outputs['logits'], target_tensor.to(device))
+            if lstm:
+                outputs = outputs
+            else:
+                outputs = outputs['logits']
             # print(loss)
+            loss = criterion(outputs, target_tensor.to(device))
             val_losses.append(loss.item())
-            val_accuracies.append((outputs['logits'].argmax(1) == target_tensor.to(device)).float())
+            val_accuracies.append((outputs.argmax(1) == target_tensor.to(device)).float())
         # break
         # print(val_losses)
         # print(val_accuracies)
@@ -162,7 +172,7 @@ def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, dev
         return log_dir
     
 
-def test(model, test_loader, criterion, device, label_to_index, only_name, log_dir, description = "", log = True):
+def test(model, test_loader, criterion, device, label_to_index, only_name, log_dir, description = "", log = True, lstm = False):
     model.eval()
     losses = []
     accuracies = []
@@ -173,10 +183,14 @@ def test(model, test_loader, criterion, device, label_to_index, only_name, log_d
         outputs = model(waveforms.squeeze(1))
         target_indices = [label_to_index[label] for label in labels]
         target_tensor = torch.tensor(target_indices)
-        loss = criterion(outputs['logits'], target_tensor.to(device))
+        if lstm:
+            outputs = outputs
+        else:
+            outputs = outputs['logits']
+        loss = criterion(outputs, target_tensor.to(device))
         losses.append(loss.item())
-        accuracies.append((outputs['logits'].argmax(1) == target_tensor.to(device)).float())
-        predictions.extend(outputs['logits'].argmax(1).cpu().numpy())
+        accuracies.append((outputs.argmax(1) == target_tensor.to(device)).float())
+        predictions.extend(outputs.argmax(1).cpu().numpy())
         real_labels.extend(target_tensor.cpu().numpy())
     
     lens = [len(a) for a in accuracies]
