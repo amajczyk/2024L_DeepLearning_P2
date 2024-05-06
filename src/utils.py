@@ -5,7 +5,10 @@ import hashlib
 # -------------------- Function from the competition's files --------------------
 MAX_NUM_WAVS_PER_CLASS = 2**27 - 1  # ~134M
 
-def which_set(filename:str, validation_percentage:float, testing_percentage:float) -> str:
+
+def which_set(
+    filename: str, validation_percentage: float, testing_percentage: float
+) -> str:
     """Determines which data partition the file should belong to.
 
     We want to keep files in the same training, validation, or testing sets even
@@ -29,23 +32,29 @@ def which_set(filename:str, validation_percentage:float, testing_percentage:floa
         String, one of 'training', 'validation', or 'testing'.
     """
 
-# ------------------- My addition to check the percentages -------------------
+    # ------------------- My addition to check the percentages -------------------
     # Check that the percentages do not exceed 100%
     if validation_percentage + testing_percentage >= 1:
-        raise ValueError('validation_percentage + testing_percentage must be less than 100')
-    
-    # if they are more than 50%, raise a warning
-    if validation_percentage > .5 or testing_percentage > .5 or validation_percentage + testing_percentage > .5:
-        print("WARNING: High validation and/or testing percentage. It is recommended to use a lower value.")
-# ------------------- End of my addition -------------------
+        raise ValueError(
+            "validation_percentage + testing_percentage must be less than 100"
+        )
 
-        
+    # if they are more than 50%, raise a warning
+    if (
+        validation_percentage > 0.5
+        or testing_percentage > 0.5
+        or validation_percentage + testing_percentage > 0.5
+    ):
+        print(
+            "WARNING: High validation and/or testing percentage. It is recommended to use a lower value."
+        )
+    # ------------------- End of my addition -------------------
 
     base_name = os.path.basename(filename)
     # We want to ignore anything after '_nohash_' in the file name when
     # deciding which set to put a wav in, so the data set creator has a way of
     # grouping wavs that are close variations of each other.
-    hash_name = re.sub(r'_nohash_.*$', '', base_name)
+    hash_name = re.sub(r"_nohash_.*$", "", base_name)
     # This looks a bit magical, but we need to decide whether this file should
     # go into the training, testing, or validation sets, and we want to keep
     # existing files in the same set even if more files are subsequently
@@ -53,18 +62,19 @@ def which_set(filename:str, validation_percentage:float, testing_percentage:floa
     # To do that, we need a stable way of deciding based on just the file name
     # itself, so we do a hash of that and then use that to generate a
     # probability value that we use to assign it.
-    hash_name = hash_name.encode('utf-8')
+    hash_name = hash_name.encode("utf-8")
     hash_name_hashed = hashlib.sha1(hash_name).hexdigest()
-    percentage_hash = ((int(hash_name_hashed, 16) %
-                        (MAX_NUM_WAVS_PER_CLASS + 1)) *
-                        (100.0 / MAX_NUM_WAVS_PER_CLASS))
+    percentage_hash = (int(hash_name_hashed, 16) % (MAX_NUM_WAVS_PER_CLASS + 1)) * (
+        100.0 / MAX_NUM_WAVS_PER_CLASS
+    )
     if percentage_hash < validation_percentage:
-        result = 'validation'
+        result = "validation"
     elif percentage_hash < (testing_percentage + validation_percentage):
-        result = 'testing'
+        result = "testing"
     else:
-        result = 'training'
+        result = "training"
     return result
+
 
 import json
 
@@ -75,20 +85,53 @@ import torch
 import json
 import json
 
-def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, device, label_to_index, only_name, log = True, description = "", lstm = False):
+
+def train(
+    model,
+    train_loader,
+    val_loader,
+    num_epochs,
+    optimizer,
+    criterion,
+    device,
+    label_to_index,
+    only_name,
+    log=True,
+    description="",
+    lstm=False,
+):
+    """
+    Train a model on a dataset.
+    Args:
+        model: The model to train
+        train_loader: The data loader for the training set
+        val_loader: The data loader for the validation set
+        num_epochs: The number of epochs to train
+        optimizer: The optimizer to use for training
+        criterion: The loss function to use
+        device: The device to use for training
+        label_to_index: A dictionary mapping the labels to indices
+        only_name: The name of the model
+        log: Whether to log the results
+        description: A description to add to the log directory
+        lstm: Whether the model is an LSTM
+    Returns:
+        The directory where the logs are saved
+    """
     losses = []
     accuracies = []
     model = model.to(device)
     train_losses = []
     for i, epoch in enumerate(range(num_epochs)):
         epoch_losses = []
-        for waveforms, sr, labels in tqdm(train_loader, total=len(train_loader), desc=f"Epoch {epoch+1}/{num_epochs}"):
-            
+        for waveforms, sr, labels in tqdm(
+            train_loader, total=len(train_loader), desc=f"Epoch {epoch+1}/{num_epochs}"
+        ):
+
             optimizer.zero_grad()
             waveforms = waveforms.to(device)
-        
+
             outputs = model(waveforms.squeeze(1))
-            
 
             # Convert string labels to integer indices
             target_indices = [label_to_index[label] for label in labels]
@@ -101,36 +144,38 @@ def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, dev
                 outputs = outputs
             else:
 
-                outputs = outputs['logits']
+                outputs = outputs["logits"]
             loss = criterion(outputs, target_tensor.to(device))
             epoch_losses.append(loss.item())
             loss.backward()
             optimizer.step()
-        
 
-        loss = sum(epoch_losses)/len(epoch_losses)
+        loss = sum(epoch_losses) / len(epoch_losses)
         train_losses.append(loss)
         print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {loss}")
         torch.cuda.empty_cache()
 
-        
         # predict on validation set
         val_losses = []
         val_accuracies = []
-        for waveforms, sr, labels in tqdm(val_loader, total=len(val_loader), desc=f"Validation"):
+        for waveforms, sr, labels in tqdm(
+            val_loader, total=len(val_loader), desc=f"Validation"
+        ):
             waveforms = waveforms.to(device)
             outputs = model(waveforms.squeeze(1))
             target_indices = [label_to_index[label] for label in labels]
             target_tensor = torch.tensor(target_indices)
-            
+
             if lstm:
                 outputs = outputs
             else:
-                outputs = outputs['logits']
+                outputs = outputs["logits"]
             # print(loss)
             loss = criterion(outputs, target_tensor.to(device))
             val_losses.append(loss.item())
-            val_accuracies.append((outputs.argmax(1) == target_tensor.to(device)).float())
+            val_accuracies.append(
+                (outputs.argmax(1) == target_tensor.to(device)).float()
+            )
         # break
         # print(val_losses)
         # print(val_accuracies)
@@ -138,20 +183,19 @@ def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, dev
         # print(val_accuracies)
         val_len = [len(a) for a in val_accuracies]
         val_accuracies = [a.sum().item() for a in val_accuracies]
-        
-        # print(val_accuracies, val_len)
-        
 
-        loss = sum(val_losses)/len(val_losses)
-        accuracy = sum(val_accuracies)/sum(val_len)
+        # print(val_accuracies, val_len)
+
+        loss = sum(val_losses) / len(val_losses)
+        accuracy = sum(val_accuracies) / sum(val_len)
 
         losses.append(loss)
         accuracies.append(accuracy)
 
-        print(f"Epoch {epoch+1}/{num_epochs}, Validation Loss: {loss}, Validation Accuracy: {accuracy}")
+        print(
+            f"Epoch {epoch+1}/{num_epochs}, Validation Loss: {loss}, Validation Accuracy: {accuracy}"
+        )
         torch.cuda.empty_cache()
-
-
 
     if log:
         date = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -160,25 +204,52 @@ def train(model, train_loader, val_loader, num_epochs, optimizer, criterion, dev
             log_dir += f"_{description}"
         os.makedirs(log_dir)
         # save acc and loss
-        data = {
-            "val_acc": accuracies,
-            "val_loss": losses,
-            "train_loss": train_losses
-        }
+        data = {"val_acc": accuracies, "val_loss": losses, "train_loss": train_losses}
 
         with open(f"{log_dir}/data.json", "w") as f:
             json.dump(data, f)
 
         return log_dir
-    
 
-def test(model, test_loader, criterion, device, label_to_index, only_name, log_dir, description = "", log = True, lstm = False):
+
+def test(
+    model,
+    test_loader,
+    criterion,
+    device,
+    label_to_index,
+    only_name,
+    log_dir,
+    description="",
+    log=True,
+    lstm=False,
+):
+    """
+    Test a model on a dataset.
+    Args:
+        model: The model to test
+        test_loader: The data loader for the test set
+        criterion: The loss function to use
+        device: The device to use for testing
+        label_to_index: A dictionary mapping the labels to indices
+        only_name: The name of the model
+        log: Whether to log the results
+        description: A description to add to the log directory
+        lstm: Whether the model is an LSTM
+    Returns:
+        The accuracy of the model on the test set
+    Output:
+        The results are saved in the log directory
+    """
+
     model.eval()
     losses = []
     accuracies = []
     predictions = []
     real_labels = []
-    for waveforms, sr, labels in tqdm(test_loader, total=len(test_loader), desc="Testing"):
+    for waveforms, sr, labels in tqdm(
+        test_loader, total=len(test_loader), desc="Testing"
+    ):
         waveforms = waveforms.to(device)
         outputs = model(waveforms.squeeze(1))
         target_indices = [label_to_index[label] for label in labels]
@@ -186,34 +257,28 @@ def test(model, test_loader, criterion, device, label_to_index, only_name, log_d
         if lstm:
             outputs = outputs
         else:
-            outputs = outputs['logits']
+            outputs = outputs["logits"]
         loss = criterion(outputs, target_tensor.to(device))
         losses.append(loss.item())
         accuracies.append((outputs.argmax(1) == target_tensor.to(device)).float())
         predictions.extend(outputs.argmax(1).cpu().numpy())
         real_labels.extend(target_tensor.cpu().numpy())
-    
+
     lens = [len(a) for a in accuracies]
     accuracies = [a.sum().item() for a in accuracies]
-    
+
     # print(val_accuracies, val_len)
 
-
-    
-
-    loss = sum(losses)/len(losses)
-    accuracy = sum(accuracies)/sum(lens)
+    loss = sum(losses) / len(losses)
+    accuracy = sum(accuracies) / sum(lens)
 
     torch.cuda.empty_cache()
-
-    
-
 
     if log:
         if description != "":
             log_dir += f"_{description}"
-       
-        try:    
+
+        try:
             data = json.load(open(f"{log_dir}/data.json", "r"))
         except:
             pass
@@ -221,8 +286,7 @@ def test(model, test_loader, criterion, device, label_to_index, only_name, log_d
 
         predictions = [int(p) for p in predictions]
         real_labels = [int(p) for p in real_labels]
-        
-        
+
         data["test_correct_in_batch"] = accuracies
         data["test_losses"] = losses
         data["test_loss"] = loss
@@ -233,11 +297,9 @@ def test(model, test_loader, criterion, device, label_to_index, only_name, log_d
         data["label_to_index"] = label_to_index
 
         print(data)
-        
 
         with open(f"{log_dir}/data.json", "w") as f:
             json.dump(data, f)
-
 
     print(f"Test Loss: {loss}, Test Accuracy: {accuracy}")
     return accuracy
