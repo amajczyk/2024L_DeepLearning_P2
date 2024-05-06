@@ -15,6 +15,7 @@ Files in main directory:
 - `AA_whisper_torch.ipynb`: Jupyter notebook with the code for Whisper model
 - `AA_whisper_torch_summary.ipynb`: Jupyter notebook with the code for Whisper model with summary
 - `lstm-hidden_sizes.png`: Image with the results of the LSTM model with different hidden sizes
+- `reduce_dataset.ipynb`: Jupyter notebook with the code copy 2368 files to unknown folder
 
 Folders in main directory:
 - `logs/`: Folder with logs for the models
