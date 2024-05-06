@@ -20,5 +20,6 @@ Folders in main directory:
 - `logs/`: Folder with logs for the models
     - contains folders with logs for each model training and testing
 - `PDFs/`: Folder with PDFs (requirements, report)
-- `src/`: Folder with utils
-
+- `plots/`: Folder with plots for the models
+    - contains folders with plots for report
+- `src/`: Folder with utils.py file with utility functions
